@@ -1,0 +1,30 @@
+== Aviary, a Twitter Archiver
+
+Aviary is a simple Ruby script to retrieve and archive your tweets. Twitter 
+"claim no intellectual property rights over the material you provide to the 
+Twitter service," so you should have a way of storing and repurposing your 
+data.
+
+== Requirements
+
+Aviary requires the Hpricot and builder gems.
+
+== Running Aviary
+
+	$ruby aviary.rb -u USERNAME -p PASSWORD --updates [new|all]
+
+Aviary will create a directory called USERNAME and begin parsing your Twitter 
+archive and downloading the raw XML representation of each tweet. The 
+"--updates all" option will parse and save every tweet, while "--updates new" 
+will stop parsing your online archive when it encounters a tweet that's 
+already been downloaded. 
+
+Currently Aviary will not use your password to authenticate requests, so your
+timeline will need to be public. This is to get around the API request limits.
+
+== What next?
+
+Now your data is yours! Start thinking about your own way to utilize your
+own data. Start thinking about your children's children's children. Will they
+be accessing the possibly non-existent http://twitter.com or would they
+prefer a paper record of "what you were doing"?
