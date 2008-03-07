@@ -17,7 +17,9 @@ Aviary will create a directory called USERNAME and begin parsing your Twitter
 archive and downloading the raw XML representation of each tweet. The 
 "--updates all" option will parse and save every tweet, while "--updates new" 
 will stop parsing your online archive when it encounters a tweet that's 
-already been downloaded. 
+already been downloaded. Optionally, specify a page number to retrieve tweets 
+starting from that page. This is useful when restarting the script after a 
+timeout.
 
 Currently Aviary will not use your password to authenticate requests, so your
 timeline will need to be public. This is to get around the API request limits.
