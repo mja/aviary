@@ -11,7 +11,7 @@ Aviary requires the Hpricot and builder gems.
 
 == Running Aviary
 
-	$ruby aviary.rb -u USERNAME -p PASSWORD --updates [new|all]
+	$ ruby aviary.rb -u USERNAME -p PASSWORD --updates [new|all] [--page XXX]
 
 Aviary will create a directory called USERNAME and begin parsing your Twitter 
 archive and downloading the raw XML representation of each tweet. The 

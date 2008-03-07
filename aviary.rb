@@ -43,7 +43,7 @@ def hark(page)
         id = /\d+/.match(meta[:href]).to_s # TODO this will probably fail if user has digits in their name.
                                            # Perhaps we should get it from the #id instead?
         show = Net::HTTP::Get.new("/statuses/show/#{id}.xml")
-        show.basic_auth $options[:user], $options[:password]
+        #show.basic_auth $options[:user], $options[:password]
     
         unless $statuses.include?(id) then # TODO also check that tweet is complete and valid
           puts "Retrieving tweet " + id
@@ -86,15 +86,17 @@ end
 
 $options = {}
 OptionParser.new do |opts|
-  opts.banner = "Usage: aviary.rb -u USERNAME -p PASSWORD --updates [new|all]"
+  opts.banner = "Usage: aviary.rb -u USERNAME -p PASSWORD --updates [new|all] --page XXX"
   
   opts.on("-u", "--user USERNAME", String, "Username") { |u| $options[:user] = u}
   opts.on("-p", "--password PASS", String, "Password") {|p| $options[:password] = p}
   opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
+  $options[:page] = 1
+  opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
 end.parse!
 
 if [:user, :password, :updates].map {|opt| $options[opt].nil?}.include?(nil)
-  puts "Usage: aviary.rb -u USERNAME -p PASSWORD --updates [new|all]"
+  puts "Usage: aviary.rb -u USERNAME -p PASSWORD --updates [new|all] --page XXX"
   exit
 end
 
@@ -104,7 +106,7 @@ Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml|
   $statuses.push(id_xml.gsub('.xml', ''))
 }
 
-hark("/account/archive")
+hark("/account/archive?page=#{$options[:page]}")
 
 
 
