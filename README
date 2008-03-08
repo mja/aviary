@@ -24,6 +24,14 @@ timeout.
 Currently Aviary will not use your password to authenticate requests, so your
 timeline will need to be public. This is to get around the API request limits.
 
+Use the cat_statuses.sh script to combine all downloaded tweets for a user
+into one statuses XML file.
+
+  $ SCREEN_NAME=username ./cat_statuses
+  
+will read in all tweets in the username directory and concatenate them 
+together in a file called username.xml. 
+
 == What next?
 
 Now your data is yours! Start thinking about your own way to utilize your
