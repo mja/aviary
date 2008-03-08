@@ -24,7 +24,7 @@ def hark(page)
     Net::HTTP.start('twitter.com') { |twitter|
   
       home = Net::HTTP::Get.new(page)
-      home.basic_auth $options[:user], $options[:password]
+      #home.basic_auth $options[:user], $options[:password]
       puts "Retrieving " + page + " ..."
       response = twitter.request(home)
   
@@ -106,7 +106,7 @@ Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml|
   $statuses.push(id_xml.gsub('.xml', ''))
 }
 
-hark("/account/archive?page=#{$options[:page]}")
+hark("/#{$options[:user]}?page=#{$options[:page]}")
 
 
 
