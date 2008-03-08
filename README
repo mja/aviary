@@ -32,6 +32,15 @@ into one statuses XML file.
 will read in all tweets in the username directory and concatenate them 
 together in a file called username.xml. 
 
+== Creating an events timeline
+
+Assuming you have already put all of your status files into a single XML file
+using cat_statuses.sh, you can transform it into a SIMILE timeline 
+(http://simile.mit.edu/timeline/) using the assets/simili.xsl transformation 
+stylesheet. View the data by modifying assets/events_template.html, replacing 
+"screenname_events.xml" (Line 66) with the filename of your transformed 
+statuses XML document.
+
 == What next?
 
 Now your data is yours! Start thinking about your own way to utilize your
