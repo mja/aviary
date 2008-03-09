@@ -33,6 +33,14 @@ stylesheet. View the data by modifying assets/events_template.html, replacing
 "screenname_events.xml" (Line 66) with the filename of your transformed 
 statuses XML document.
 
+This can also be done automatically using the timeline.rb script:
+
+    $ ruby timeline.rb -u USERNAME
+    
+which will read in single tweets from the USERNAME's directory and construct
+an events timeline (USERNAME_events.xml) in the timelines directory.
+    
+
 == What next?
 
 Now your data is yours! Start thinking about your own way to utilize your

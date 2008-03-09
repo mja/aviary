@@ -19,7 +19,12 @@ end
 
 # boil a tweet down to its least common words
 def summarize(text, concordances)
-  return text
+  words = text.split
+  text_concordances = words.map{|word| concordances[word]}
+  # Include words with the least common count
+  include_words_with_count = text_concordances.sort.first
+  title = words.select {|word| include_words_with_count == concordances[word]}.join(' ')
+  return title
 end
 
 $options = {}
