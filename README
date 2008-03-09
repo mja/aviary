@@ -11,7 +11,7 @@ Aviary requires the Hpricot and builder gems.
 
 == Running Aviary
 
-	$ ruby aviary.rb -u USERNAME -p PASSWORD --updates [new|all] [--page XXX]
+  $ ruby aviary.rb -u USERNAME -p PASSWORD --updates [new|all] [--page XXX]
 
 Aviary will create a directory called USERNAME and begin parsing your Twitter 
 archive and downloading the raw XML representation of each tweet. The 
@@ -27,7 +27,7 @@ timeline will need to be public. This is to get around the API request limits.
 Use the cat_statuses.sh script to combine all downloaded tweets for a user
 into one statuses XML file.
 
-  $ SCREEN_NAME=username ./cat_statuses
+  $ SCREEN_NAME=username ./cat_statuses.sh > username.xml
   
 will read in all tweets in the username directory and concatenate them 
 together in a file called username.xml. 
@@ -40,6 +40,14 @@ using cat_statuses.sh, you can transform it into a SIMILE timeline
 stylesheet. View the data by modifying assets/events_template.html, replacing 
 "screenname_events.xml" (Line 66) with the filename of your transformed 
 statuses XML document.
+
+This can also be done automatically using the timeline.rb script:
+
+    $ ruby timeline.rb -u USERNAME
+    
+which will read in single tweets from the USERNAME's directory and construct
+an events timeline (USERNAME_events.xml) in the timelines directory.
+    
 
 == What next?
 
