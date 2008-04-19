@@ -85,30 +85,38 @@ def concatenate(archive)
   }
 end
 
-CONFIG = YAML.load_file('config.yml')
-$options = {}
-$options[:user] = CONFIG['username']
-$options[:pass] = CONFIG['password']
-OptionParser.new do |opts|
-  opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
+begin
+
+  CONFIG = YAML.load_file('config.yml')
+  $options = {}
+  $options[:user] = CONFIG['username']
+  $options[:pass] = CONFIG['password']
+  OptionParser.new do |opts|
+    opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
-  opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
-  $options[:page] = 1
-  opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
-end.parse!
+    opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
+    $options[:page] = 1
+    opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
+  end.parse!
 
-if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
-  puts "Usage: aviary.rb --updates [new|all] --page XXX"
-  exit
+  if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
+    puts "Usage: aviary.rb --updates [new|all] --page XXX"
+    exit
+  end
+
+  $statuses = Array.new
+  FileUtils.mkdir_p $options[:user]
+  Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+    $statuses.push(id_xml.gsub('.xml', ''))
+  }
+
+  hark("/#{$options[:user]}?page=#{$options[:page]}")
+  
+rescue Errno::ENOENT
+  puts "Whoops!"
+  puts "There is no configuration file."
+  puts "Place your username and password in a file called `config.yml`. See config-example.yml."
 end
-
-$statuses = Array.new
-FileUtils.mkdir_p $options[:user]
-Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
-  $statuses.push(id_xml.gsub('.xml', ''))
-}
-
-hark("/#{$options[:user]}?page=#{$options[:page]}")
 
 
 
