@@ -10,6 +10,7 @@ require 'net/http'
 require 'uri'
 require 'fileutils'
 require 'optparse'
+require 'yaml'
 
 def hark(page)
   
@@ -84,19 +85,20 @@ def concatenate(archive)
   }
 end
 
+CONFIG = YAML.load_file('config.yml')
 $options = {}
+$options[:user] = CONFIG['username']
+$options[:pass] = CONFIG['password']
 OptionParser.new do |opts|
-  opts.banner = "Usage: aviary.rb -u USERNAME -p PASSWORD --updates [new|all] --page XXX"
+  opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
-  opts.on("-u", "--user USERNAME", String, "Username") { |u| $options[:user] = u}
-  opts.on("-p", "--password PASS", String, "Password") {|p| $options[:password] = p}
   opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
   $options[:page] = 1
   opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
 end.parse!
 
-if [:user, :password, :updates].map {|opt| $options[opt].nil?}.include?(nil)
-  puts "Usage: aviary.rb -u USERNAME -p PASSWORD --updates [new|all] --page XXX"
+if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
+  puts "Usage: aviary.rb --updates [new|all] --page XXX"
   exit
 end
 
