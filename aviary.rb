@@ -108,8 +108,16 @@ begin
     $statuses.push(id_xml.gsub('.xml', '').to_i)
   }
 
-  # find the most recent status
-  since_id = $statuses.sort.reverse.first
+  case $options[:updates]
+  when :new
+    # find the most recent status
+    since_id = $statuses.sort.reverse.first
+  when :all
+    since_id = nil
+  else
+    puts "Unknown option --updates #{$options[:updates]}. Try 'new' or 'all'"
+    exit
+  end
 
   hark($options[:user], $options[:pass], since_id, $options[:page])
   
