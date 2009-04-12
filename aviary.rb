@@ -92,6 +92,7 @@ begin
   OptionParser.new do |opts|
     opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
+    $options[:updates] = :new
     opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
     $options[:page] = 1
     opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
