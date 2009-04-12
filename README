@@ -19,13 +19,10 @@ and password. Run Aviary with:
 Aviary will create a directory called USERNAME and begin parsing your Twitter 
 archive and downloading the raw XML representation of each tweet. The 
 "--updates all" option will parse and save every tweet, while "--updates new" 
-will stop parsing your online archive when it encounters a tweet that's 
-already been downloaded. Optionally, specify a page number to retrieve tweets 
-starting from that page. This is useful when restarting the script after a 
-timeout.
-
-Currently Aviary will not use your password to authenticate requests, so your
-timeline will need to be public. This is to get around the API request limits.
+will will only request tweets that are newer than the most recent one already
+present in the USERNAME direcotry.  already been downloaded. Optionally,
+specify a page number to retrieve tweets starting from that page. This is
+useful when restarting the script after a timeout.
 
 Use the cat_statuses.sh script to combine all downloaded tweets for a user
 into one statuses XML file.
