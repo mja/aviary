@@ -5,68 +5,66 @@
 
 require 'rubygems'
 require 'hpricot'
-require 'builder'
-require 'net/http'
+require 'restclient'
 require 'uri'
 require 'fileutils'
 require 'optparse'
 require 'yaml'
 
-def hark(page)
+def hark(user, password, since_id, page)
   
   FileUtils.mkdir_p $options[:user] # Create a directory to hold the tweets
   
   listening = true
-  older = nil
   
   while listening do # parse the account archive until we come to the last page (all)
                      # or we see a tweet we've alrady downloaded
   
-    Net::HTTP.start('twitter.com') { |twitter|
-  
-      home = Net::HTTP::Get.new(page)
-      #home.basic_auth $options[:user], $options[:password]
-      puts "Retrieving " + page + " ..."
-      response = twitter.request(home)
-  
-      puts "Parsing..."
-      tweets = Hpricot(response.body)
-    
-      # Parse the status update ids out of the URL for each entry
-      entries = tweets/"a.entry-date"
-  
-      if entries.empty? then
-        puts "Looks like Twitter is undergoing maintenance. Hang in there and try again later. Also, double check your username and password!"
-        exit
-      end
-  
-      entries.each {|meta|
-        id = /\d+/.match(meta[:href]).to_s # TODO this will probably fail if user has digits in their name.
-                                           # Perhaps we should get it from the #id instead?
-        show = Net::HTTP::Get.new("/statuses/show/#{id}.xml")
-        #show.basic_auth $options[:user], $options[:password]
-    
-        unless $statuses.include?(id) then # TODO also check that tweet is complete and valid
-          puts "Retrieving tweet " + id
-          status = twitter.request(show)
-          File.open("#{$options[:user]}/#{id}.xml", 'w') { |tweet_xml| tweet_xml << status.body}
-        else 
-          puts "Already fetched tweet " + id
-          # Stop if not asked to get all tweets
-          unless $options[:updates] == :all then listening = false; break; end 
-        end
+    begin
       
+      unless since_id.nil? 
+        since_id_parameter = "&since_id=#{since_id}"
+      else
+        since_id_parameter = ""
+      end
+
+      page_parameter = "&page=#{page}"
+      count_parameter = "count=200"
+
+      query = count_parameter + since_id_parameter + page_parameter
+      
+      user_timeline_url = 'http://twitter.com/statuses/user_timeline.xml?' + query
+
+      user_timeline_resource = RestClient::Resource.new(user_timeline_url, :user => user, :password => password)
+
+      puts "Fetching #{user_timeline_url}"
+      user_timeline_xml = user_timeline_resource.get 
+      puts "Retrieved page #{page} ..."
+      
+      tweets = (Hpricot(user_timeline_xml)/"status")
+      puts "Parsing #{tweets.length} tweets..."
+
+      tweets.each {|tweet|
+
+       id = tweet.at("id").inner_html
+       
+       puts "Saving tweet #{id}" 
+       File.open("#{$options[:user]}/#{id}.xml", 'w') { |tweet_xml| tweet_xml << tweet.to_s}
+              
       }
-    
-  
-    older = (tweets/"div.pagination a").select {|link| link.inner_text =~ /Older/}.first
-   } 
-    unless older.nil?
-      page = URI.parse(older[:href]).select(:path, :query).join('?')
-    else
-      listening = false # No more pages to parse, so stop listening.
-    end
-    
+
+      unless tweets.empty?
+        page = page + 1
+      else
+        listening = false
+      end
+     rescue RestClient::Unauthorized => e
+       puts "Could not authenticate with Twitter. Doublecheck your username (#{user}) and password"
+       listening = false
+     rescue RestClient::RequestFailed => e
+       puts "Twitter isn't responding: #{e.message}"
+       listening = false
+     end
   end # listening
   
 end
@@ -107,10 +105,13 @@ begin
   $statuses = Array.new
   FileUtils.mkdir_p $options[:user]
   Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
-    $statuses.push(id_xml.gsub('.xml', ''))
+    $statuses.push(id_xml.gsub('.xml', '').to_i)
   }
 
-  hark("/#{$options[:user]}?page=#{$options[:page]}")
+  # find the most recent status
+  since_id = $statuses.sort.reverse.first
+
+  hark($options[:user], $options[:pass], since_id, $options[:page])
   
 rescue Errno::ENOENT
   puts "Whoops!"
