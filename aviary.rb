@@ -28,7 +28,7 @@ end
 
 class TwitterArchiver
   def prepare_access_token(oauth_token, oauth_token_secret)
-    consumer = OAuth::Consumer.new("APIKey", "APISecret",
+    consumer = OAuth::Consumer.new("KYcLNiVtuTb5F55gWuVZQw", "Vw36mGMxyhxxtfyz86UW9Fwtht4ZLmxerI4YUrRHLc",
                                    { :site => "http://api.twitter.com",
                                      :scheme => :header
     })
@@ -67,7 +67,7 @@ class TwitterArchiver
     @replies.delete(id)
   end
 
-  def hark(since_id, page)
+  def hark(since_id, page, mentions=nil)
     
     FileUtils.mkdir_p @user # Create a directory to hold the tweets
     
@@ -90,9 +90,10 @@ class TwitterArchiver
         screen_name_parameter = "&screen_name=#{@user}"
 
         query = count_parameter + since_id_parameter + page_parameter + screen_name_parameter
+        api = "mentions" unless (mentions.nil? or not mentions)
+        api ||= "user_timeline"
 
-        # user_timeline_url = 'http://api.twitter.com/1/statuses/mentions.xml?' + query
-        user_timeline_url = 'http://api.twitter.com/1/statuses/user_timeline.xml?' + query
+        user_timeline_url = "http://api.twitter.com/1/statuses/#{api}.xml?" + query
         puts "Fetching #{user_timeline_url}"
         user_timeline_resource = @access_token.request(:get, user_timeline_url)
         user_timeline_xml = user_timeline_resource.body
@@ -103,6 +104,8 @@ class TwitterArchiver
         if tweets.length == 0
           body = (hp/"body")
           raise FailWhaleError, "Fail Whale. Wait 5 seconds and try again" unless body.length == 0 # Fail Whale HTML page
+          hash = (hp/"hash")
+          raise RetrieveError, hash.at("error").inner_html
         end
         puts "Parsing #{tweets.length} tweets..."
         tweets.each {|tweet|
@@ -122,6 +125,9 @@ class TwitterArchiver
         puts e.reason
         sleep(5)
         retry
+      rescue RetrieveError => e
+        puts "Download failed: #{e.reason}"
+        listening = false
        # rescue RestClient::Unauthorized => e
        #   puts "Could not authenticate with Twitter. Doublecheck your username (#{user}) and password"
        #   listening = false
@@ -149,7 +155,7 @@ class TwitterArchiver
     tweet_xml = tweet_resource.body
     tweet = (Nokogiri(tweet_xml)/"status").first
     error = (Nokogiri(tweet_xml)/"hash").first
-    raise RetrieveError, "auth problem?" unless error.nil?
+    raise RetrieveError, error.at("error").inner_html unless error.nil?
     return tweet
   end
 
@@ -236,15 +242,19 @@ begin
   end
   
   ta = TwitterArchiver.new($options[:user], $options[:token], $options[:secret])
-  ta.hark(since_id, $options[:page])
+  ta.hark(since_id, $options[:page], false) # Get timeline
+  ta.hark(since_id, $options[:page], true) # Get last 800 mentions
   ta.log_replies()
   
 rescue Errno::ENOENT
   puts "Whoops!"
   puts "There is no configuration file."
   puts "Place your username and password in a file called `config.yml`. See config-example.yml."
-rescue StandardError
+rescue StandardError => e
+  puts "Caught an error... Logging replies"
   ta.log_replies()
+  puts "Done"
+  puts e.message
 end
 
 
