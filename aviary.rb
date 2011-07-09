@@ -10,6 +10,22 @@ require 'uri'
 require 'fileutils'
 require 'optparse'
 require 'yaml'
+require 'oauth'
+
+
+# Exchange your oauth_token and oauth_token_secret for an AccessToken instance.
+def prepare_access_token(oauth_token, oauth_token_secret)
+	consumer = OAuth::Consumer.new("APIKey", "APISecret",
+																 { :site => "http://api.twitter.com",
+																	 :scheme => :header
+	})
+	# now create the access token object from passed values
+	token_hash = { :oauth_token => oauth_token,
+		:oauth_token_secret => oauth_token_secret
+	}
+	access_token = OAuth::AccessToken.from_hash(consumer, token_hash )
+	return access_token
+end
 
 def hark(user, password, since_id, page)
   
@@ -21,6 +37,11 @@ def hark(user, password, since_id, page)
                      # or we see a tweet we've alrady downloaded
   
     begin
+			# Exchange our oauth_token and oauth_token secret for the AccessToken instance.
+			access_token = prepare_access_token($options[:token], $options[:secret])
+																					
+			# use the access token as an agent to get the home timeline
+			# response = access_token.request(:get, "http://api.twitter.com/1/statuses/home_timeline.json")
       
       unless since_id.nil? 
         since_id_parameter = "&since_id=#{since_id}"
@@ -30,15 +51,17 @@ def hark(user, password, since_id, page)
 
       page_parameter = "&page=#{page}"
       count_parameter = "count=200"
+			screen_name_parameter = "&screen_name=jmartindf"
 
-      query = count_parameter + since_id_parameter + page_parameter
+      query = count_parameter + since_id_parameter + page_parameter + screen_name_parameter
       
-      user_timeline_url = 'http://twitter.com/statuses/user_timeline.xml?' + query
-
-      user_timeline_resource = RestClient::Resource.new(user_timeline_url, :user => user, :password => password)
+      user_timeline_url = 'http://api.twitter.com/1/statuses/user_timeline.xml?' + query
+			user_timeline_resource = access_token.request(:get, user_timeline_url)
+      # user_timeline_resource = RestClient::Resource.new(user_timeline_url, :user => user, :password => password)
 
       puts "Fetching #{user_timeline_url}"
-      user_timeline_xml = user_timeline_resource.get 
+      user_timeline_xml = user_timeline_resource.body
+			File.open("debug.log", 'w') { |data| data << user_timeline_resource.body }
       puts "Retrieved page #{page} ..."
       
       tweets = (Hpricot(user_timeline_xml)/"status")
@@ -89,6 +112,8 @@ begin
   $options = {}
   $options[:user] = CONFIG['username']
   $options[:pass] = CONFIG['password']
+	$options[:secret] = CONFIG['secret']
+	$options[:token] = CONFIG['token']
   OptionParser.new do |opts|
     opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
