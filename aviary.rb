@@ -4,7 +4,7 @@
 #  Copyright (c) 2007. All rights reserved.
 
 require 'rubygems'
-require 'hpricot'
+require 'nokogiri'
 require 'uri'
 require 'fileutils'
 require 'optparse'
@@ -91,13 +91,14 @@ class TwitterArchiver
 
         query = count_parameter + since_id_parameter + page_parameter + screen_name_parameter
 
+        # user_timeline_url = 'http://api.twitter.com/1/statuses/mentions.xml?' + query
         user_timeline_url = 'http://api.twitter.com/1/statuses/user_timeline.xml?' + query
         puts "Fetching #{user_timeline_url}"
         user_timeline_resource = @access_token.request(:get, user_timeline_url)
         user_timeline_xml = user_timeline_resource.body
         File.open("debug.log", 'w') { |data| data << user_timeline_xml }
         puts "Retrieved page #{page} ..."
-        hp = Hpricot(user_timeline_xml)
+        hp = Nokogiri(user_timeline_xml)
         tweets = (hp/"status")
         if tweets.length == 0
           body = (hp/"body")
@@ -146,8 +147,8 @@ class TwitterArchiver
     puts "Retrieving tweet " + id
     tweet_resource = @access_token.request(:get, tweet_url)
     tweet_xml = tweet_resource.body
-    tweet = (Hpricot(tweet_xml)/"status").first
-    error = (Hpricot(tweet_xml)/"hash").first
+    tweet = (Nokogiri(tweet_xml)/"status").first
+    error = (Nokogiri(tweet_xml)/"hash").first
     raise RetrieveError, "auth problem?" unless error.nil?
     return tweet
   end
@@ -169,7 +170,7 @@ class TwitterArchiver
       end#if reply_to
     else #status is on disk. load it and check for replies
       fn = "#{@user}/#{id}.xml"
-      tweet = (Hpricot(open(fn))/"status")
+      tweet = (Nokogiri(open(fn))/"status")
       reply_to = tweet.at("in_reply_to_status_id").inner_html
       if (not reply_to.nil?) and (not reply_to.eql?(""))
         track_reply(reply_to)
