@@ -59,7 +59,7 @@ begin
 
   CONFIG = YAML.load_file('config.yml')
   $options = {}
-	$options[:tweet_path] = CONFIG['archive_dir']
+	$options[:tweet_path] = File.expand_path(CONFIG['archive_dir'])
   OptionParser.new do |opts|
     opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
