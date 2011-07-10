@@ -1,3 +1,12 @@
+#
+#  Created by Mark James Adams on 2007-05-14.
+#  Copyright (c) 2007. All rights reserved.
+
+require 'nokogiri'
+require 'uri'
+require 'fileutils'
+require 'oauth'
+require 'time'
 
 class RetrieveError < StandardError
   attr_reader :reason
@@ -36,25 +45,27 @@ class TwitterArchiver
     return access_token
   end
 
-  def initialize(user, token, secret)
+  def initialize(user, token, secret, root)
     @user = user
     @token = token
     @secret = secret
     @access_token = prepare_access_token($options[:token], $options[:secret])
     @replies = Array.new()
     @lost_replies = Array.new()
-    @t_prefix = File.join(@user,"")
-    @dm_prefix = File.join(@user,"dm")
+    @t_prefix = File.join(root, @user,"")
+    @dm_prefix = File.join(root, @user,"dm")
+    @replies_path = File.join(@t_prefix,"replies.txt")
+    @lost_replies_path = File.join(@t_prefix,"lost_replies.txt")
     @t_node = "status"
     @dm_node = "direct_message"
     
     FileUtils.mkdir_p @t_prefix
     FileUtils.mkdir_p @dm_prefix
 
-    File.foreach("#{@user}/replies.txt") { |line|
+    File.foreach(@replies_path) { |line|
       track_reply(line.strip) unless line.nil?
     }
-    File.foreach("#{@user}/lost_replies.txt") { |line|
+    File.foreach(@lost_replies_path) { |line|
       track_reply(line.strip, true)
     }
   end
@@ -64,12 +75,12 @@ class TwitterArchiver
     @lost_replies.delete("")
     @replies.compact!
     @lost_replies.compact!
-    File.open("#{@user}/replies.txt", 'w') { |rf|
+    File.open(@replies_path, 'w') { |rf|
       @replies.each { |reply|
         rf << reply.to_s << "\n"
       }
     }
-    File.open("#{@user}/lost_replies.txt", 'w') { |rf|
+    File.open(@lost_replies_path, 'w') { |rf|
       @lost_replies.each { |reply|
         rf << reply.to_s << "\n"
       }
@@ -154,7 +165,7 @@ class TwitterArchiver
         puts "Fetching #{user_timeline_url}"
         user_timeline_resource = @access_token.request(:get, user_timeline_url)
         user_timeline_xml = user_timeline_resource.body
-        File.open("debug.log", 'w') { |data| data << user_timeline_xml }
+        File.open(File.join(@t_prefix,"debug.log"), 'w') { |data| data << user_timeline_xml }
         puts "Retrieved page #{page} ..."
         hp = Nokogiri(user_timeline_xml)
         tweets = (hp/node)
@@ -192,8 +203,7 @@ class TwitterArchiver
 
   def check_status_disk(id)
     $statuses = Array.new
-    FileUtils.mkdir_p @user
-    Dir.new(@user).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+    Dir.new(@t_prefix).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
       $statuses.push(id_xml.gsub('.xml', '').to_i)
     }
     return $statuses.index(id.to_i)

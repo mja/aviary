@@ -3,22 +3,63 @@
 #  Created by Mark James Adams on 2007-05-14.
 #  Copyright (c) 2007. All rights reserved.
 
-require 'nokogiri'
-require 'uri'
-require 'fileutils'
 require 'optparse'
 require 'yaml'
-require 'oauth'
-require 'time'
 require 'twitter_archiver'
+require 'launchy'
+
+def prompt(default, *args)
+  if not STDOUT.sync
+    STDOUT.sync = true
+    fix = true
+  end
+  print(*args)
+  result = gets.strip
+  if fix
+    STDOUT.sync = false
+  end
+  return result.empty? ? default : result
+end
+
+def config(username)
+  auth = "twitauth.yml"
+  users = YAML.load_file(auth)
+  config = Hash.new()
+
+  key = "KYcLNiVtuTb5F55gWuVZQw"
+  secret = "Vw36mGMxyhxxtfyz86UW9Fwtht4ZLmxerI4YUrRHLc"
+
+  # Get a request token
+  consumer = OAuth::Consumer.new(key, secret,
+                               { :site => "http://api.twitter.com",
+                                 :scheme => :header
+  })
+  request_token=consumer.get_request_token
+
+  # Launch the authorization URL
+  Launchy.open( request_token.authorize_url )
+
+  # Prompt for a PIN number
+  pin = prompt(nil,"Enter the Twitter PIN: ")
+  
+  if not pin.nil?
+    # Get an access token
+    access_token=request_token.get_access_token(:oauth_verifier => pin)
+    config['token'] = access_token.token
+    config['secret'] = access_token.secret
+    users[username] = config
+    File.open( auth, 'w' ) do |out|
+      YAML.dump( users, out )
+    end#File.open
+  end#if not pin.nil?
+end#config
 
 begin
 
   CONFIG = YAML.load_file('config.yml')
+  USERS = YAML.load_file('twitauth.yml')
   $options = {}
-  $options[:user] = CONFIG['username']
-	$options[:secret] = CONFIG['secret']
-	$options[:token] = CONFIG['token']
+	$options[:tweet_path] = CONFIG['archive_dir']
   OptionParser.new do |opts|
     opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
@@ -39,15 +80,21 @@ begin
   else :all
     updates_only = false
   end
-  
-  ta = TwitterArchiver.new($options[:user], $options[:token], $options[:secret])
-  ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/statuses/user_timeline", false) # Get timeline
-  ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/statuses/mentions", false) # Get last 800 mentions
-  ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/direct_messages", true) # Get direct messages sent to me
-  ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/direct_messages/sent", true) # Get direct messages I sent
-  ta.find_missing_replies # Look to see if we're missing any tweets we've replied to
-  ta.try_to_download_replies # Try to download those missing messages
-  ta.log_replies() # Make sure to save the list of missing messages
+ 
+  USERS.each { |user, auth|
+    token = auth['token']
+    secret = auth['secret']
+
+    ta = TwitterArchiver.new(user, token, secret, $options[:tweet_path])
+    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/statuses/user_timeline", false) # Get timeline
+    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/statuses/mentions", false) # Get last 800 mentions
+    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/direct_messages", true) # Get direct messages sent to me
+    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/direct_messages/sent", true) # Get direct messages I sent
+    ta.find_missing_replies # Look to see if we're missing any tweets we've replied to
+    ta.try_to_download_replies # Try to download those missing messages
+    ta.log_replies() # Make sure to save the list of missing messages
+  }
+
   
 rescue Errno::ENOENT
   puts "Whoops!"

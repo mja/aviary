@@ -1,5 +1,5 @@
 *.xml
 *.txt
 .DS_Store
-config.yml
 debug.log
+twitauth.yml
