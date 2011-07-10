@@ -69,10 +69,12 @@ begin
     opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
     $options[:new_account] = nil
     opts.on("--add XXX", String, "NewAccount") {|account| $options[:new_account] = account}
+    $options[:only] = nil
+    opts.on("--only XXX", String, "OnlyAccount") {|account| $options[:only] = account}
   end.parse!
 
   if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
-    puts "Usage: aviary.rb --updates [new|all] --page XXX --add XXX"
+    puts "Usage: aviary.rb --updates [new|all] --page XXX --add XXX --only XXX"
     exit
   end
 
@@ -90,6 +92,7 @@ begin
   end
  
   USERS.each { |user, auth|
+    next unless ($options[:only].nil? or $options[:only]==user)
     token = auth['token']
     secret = auth['secret']
 
