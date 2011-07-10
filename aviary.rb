@@ -56,6 +56,11 @@ class TwitterArchiver
     @access_token = prepare_access_token($options[:token], $options[:secret])
     @replies = Array.new()
     @lost_replies = Array.new()
+    @t_prefix = File.join(@user,"")
+    @dm_prefix = File.join(@user,"dm")
+    @t_node = "status"
+    @dm_node = "direct_message"
+
     File.foreach("#{@user}/replies.txt") { |line|
       track_reply(line.strip) unless line.nil?
     }
@@ -113,7 +118,7 @@ class TwitterArchiver
     }
   end
 
-  def hark(since_id, page, mentions=nil)
+  def hark(since_id, page, api, dm=false)
     
     FileUtils.mkdir_p @user # Create a directory to hold the tweets
     
@@ -130,23 +135,26 @@ class TwitterArchiver
         else
           since_id_parameter = ""
         end
+        if dm
+          node = @dm_node
+        else
+          node = @t_node
+        end
 
         page_parameter = "&page=#{page}"
         count_parameter = "count=200"
         screen_name_parameter = "&screen_name=#{@user}"
 
         query = count_parameter + since_id_parameter + page_parameter + screen_name_parameter
-        api = "mentions" unless (mentions.nil? or not mentions)
-        api ||= "user_timeline"
 
-        user_timeline_url = "http://api.twitter.com/1/statuses/#{api}.xml?" + query
+        user_timeline_url = "#{api}.xml?" + query
         puts "Fetching #{user_timeline_url}"
         user_timeline_resource = @access_token.request(:get, user_timeline_url)
         user_timeline_xml = user_timeline_resource.body
         File.open("debug.log", 'w') { |data| data << user_timeline_xml }
         puts "Retrieved page #{page} ..."
         hp = Nokogiri(user_timeline_xml)
-        tweets = (hp/"status")
+        tweets = (hp/node)
         if tweets.length == 0
           body = (hp/"body")
           raise FailWhaleError, "Fail Whale. Wait 5 seconds and try again" unless body.length == 0 # Fail Whale HTML page
@@ -159,7 +167,7 @@ class TwitterArchiver
          id = tweet.at("id").inner_html
          
          puts "Saving tweet #{id}" 
-         save_tweet_disk(id, tweet)
+         save_tweet_disk(id, tweet, dm)
         }
 
         unless tweets.empty?
@@ -219,7 +227,12 @@ class TwitterArchiver
       }
   end
 
-  def save_tweet_disk(id, tweet)
+  def save_tweet_disk(id, tweet, dm=false)
+    if dm
+      fname = File.join(@dm_prefix, "#{id}.xml")
+    else
+      fname = File.join(@t_prefix, "#{id}.xml")
+    end
     begin
     if not check_status_disk(id)
       if tweet.nil?
@@ -229,15 +242,14 @@ class TwitterArchiver
       end#if tweet.nil?
       at = Time.parse(tweet.at("created_at").inner_html).iso8601
       puts "Saving tweet #{id}" 
-      File.open("#{@user}/#{id}.xml", 'w') { |tweet_xml| tweet_xml << tweet.to_s}
-      reply_to = tweet.at("in_reply_to_status_id").inner_html
+      File.open(fname, 'w') { |tweet_xml| tweet_xml << tweet.to_s}
+      reply_to = tweet.at("in_reply_to_status_id").inner_html unless dm
       if (not reply_to.nil?) and (not reply_to.eql?(""))
         track_reply(reply_to)
       end#if reply_to
     else #status is on disk. load it and check for replies
-      fn = "#{@user}/#{id}.xml"
-      tweet = (Nokogiri(open(fn))/"status")
-      reply_to = tweet.at("in_reply_to_status_id").inner_html
+      tweet = (Nokogiri(open(fname))/"status")
+      reply_to = tweet.at("in_reply_to_status_id").inner_html unless dm
       if (not reply_to.nil?) and (not reply_to.eql?(""))
         track_reply(reply_to)
       end#if reply_to
@@ -287,23 +299,38 @@ begin
     exit
   end
 
-  $statuses = Array.new
   FileUtils.mkdir_p $options[:user]
-  Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
-    $statuses.push(id_xml.gsub('.xml', '').to_i)
-  }
-
   case $options[:updates]
   when :new
+    $statuses = Array.new
+    Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+      $statuses.push(id_xml.gsub('.xml', '').to_i)
+    }
     # find the most recent status
     since_id = $statuses.sort.reverse.first
   else :all
     since_id = nil
   end
   
+  dirname = File.join($options[:user],"dm")
+  FileUtils.mkdir_p dirname
+  case $options[:updates]
+  when :new
+    $statuses = Array.new
+    Dir.new(dirname).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+      $statuses.push(id_xml.gsub('.xml', '').to_i)
+    }
+    # find the most recent status
+    dm_since_id = $statuses.sort.reverse.first
+  else :all
+    dm_since_id = nil
+  end
+
   ta = TwitterArchiver.new($options[:user], $options[:token], $options[:secret])
-  ta.hark(since_id, $options[:page], false) # Get timeline
-  ta.hark(since_id, $options[:page], true) # Get last 800 mentions
+  ta.hark(since_id, $options[:page], "http://api.twitter.com/1/statuses/user_timeline", false) # Get timeline
+  ta.hark(since_id, $options[:page], "http://api.twitter.com/1/statuses/mentions") # Get last 800 mentions
+  ta.hark(dm_since_id, $options[:page], "http://api.twitter.com/1/direct_messages", true) # Get last 800 mentions
+  ta.hark(dm_since_id, $options[:page], "http://api.twitter.com/1/direct_messages/sent", true) # Get last 800 mentions
   ta.find_missing_replies
   ta.try_to_download_replies
   ta.log_replies()
