@@ -19,6 +19,13 @@ class RetrieveError < StandardError
   end
 end
 
+class RateLimit < StandardError
+  attr_reader :reason
+  def initialize(reason)
+    @reason = reason
+  end
+end
+
 class FailWhaleError < StandardError
   attr_reader :reason
   def initialize(reason)
@@ -28,7 +35,9 @@ end
 
 class TwitterArchiver
   def prepare_access_token(oauth_token, oauth_token_secret)
-    consumer = OAuth::Consumer.new("KYcLNiVtuTb5F55gWuVZQw", "Vw36mGMxyhxxtfyz86UW9Fwtht4ZLmxerI4YUrRHLc",
+    key = "KYcLNiVtuTb5F55gWuVZQw"
+    secret = "Vw36mGMxyhxxtfyz86UW9Fwtht4ZLmxerI4YUrRHLc"
+    consumer = OAuth::Consumer.new(key, secret,
                                    { :site => "http://api.twitter.com",
                                      :scheme => :header
     })
@@ -46,25 +55,62 @@ class TwitterArchiver
     @secret = secret
     @access_token = prepare_access_token($options[:token], $options[:secret])
     @replies = Array.new()
+    @lost_replies = Array.new()
     File.foreach("#{@user}/replies.txt") { |line|
-      track_reply(line.strip)
+      track_reply(line.strip) unless line.nil?
+    }
+    File.foreach("#{@user}/lost_replies.txt") { |line|
+      track_reply(line.strip, true)
     }
   end
 
   def log_replies()
+    @replies.delete("")
+    @lost_replies.delete("")
+    @replies.compact!
+    @lost_replies.compact!
     File.open("#{@user}/replies.txt", 'w') { |rf|
       @replies.each { |reply|
         rf << reply.to_s << "\n"
       }
     }
+    File.open("#{@user}/lost_replies.txt", 'w') { |rf|
+      @lost_replies.each { |reply|
+        rf << reply.to_s << "\n"
+      }
+    }
   end
  
-  def track_reply(id)
-    @replies.push(id)
+  def track_reply(id, missing=false)
+    if missing
+      @replies.delete(id)
+      @lost_replies.push(id)
+    else
+      @lost_replies.delete(id)
+      @replies.push(id)
+    end
+    @replies.uniq!
+    @lost_replies.uniq!
+    log_replies()
   end
 
-  def got_reply(id)
+  def got_reply(id, missing=false)
     @replies.delete(id)
+    @lost_replies.delete(id)
+    @replies.uniq!
+    @lost_replies.uniq!
+    log_replies()
+  end
+
+  def find_missing_replies
+    @replies.uniq!
+    @replies.each { |id|
+      pos = check_status_disk(id)
+      if not pos.nil?
+        puts "Found tweet #{id}"
+        got_reply(id)
+      end
+    }
   end
 
   def hark(since_id, page, mentions=nil)
@@ -105,7 +151,7 @@ class TwitterArchiver
           body = (hp/"body")
           raise FailWhaleError, "Fail Whale. Wait 5 seconds and try again" unless body.length == 0 # Fail Whale HTML page
           hash = (hp/"hash")
-          raise RetrieveError, hash.at("error").inner_html
+          raise RetrieveError, hash.at("error").inner_html unless body.length == 0
         end
         puts "Parsing #{tweets.length} tweets..."
         tweets.each {|tweet|
@@ -128,12 +174,6 @@ class TwitterArchiver
       rescue RetrieveError => e
         puts "Download failed: #{e.reason}"
         listening = false
-       # rescue RestClient::Unauthorized => e
-       #   puts "Could not authenticate with Twitter. Doublecheck your username (#{user}) and password"
-       #   listening = false
-       # rescue RestClient::RequestFailed => e
-       #   puts "Twitter isn't responding: #{e.message}"
-       #   listening = false
        end
     end # listening
     
@@ -155,8 +195,28 @@ class TwitterArchiver
     tweet_xml = tweet_resource.body
     tweet = (Nokogiri(tweet_xml)/"status").first
     error = (Nokogiri(tweet_xml)/"hash").first
-    raise RetrieveError, error.at("error").inner_html unless error.nil?
+    emsg = error.at('error').inner_html unless error.nil?
+    if not emsg.nil? and ( emsg.include?("No status found with that ID.") or
+                          emsg.include?("Not found") )
+      track_reply(id, true)
+    end
+    if not emsg.nil? and emsg.include?("Rate limit exceeded")
+      raise RateLimit, emsg
+    end
+    raise RetrieveError, "Tweet #{id}: #{emsg}" unless error.nil?
     return tweet
+  end
+
+  def try_to_download_replies
+      @replies.each { |id|
+        begin
+        tweet = get_single_tweet(id)
+        save_tweet_disk(id, tweet)
+        got_reply(id)
+        rescue RetrieveError => e
+          puts "#{e.reason}"
+        end
+      }
   end
 
   def save_tweet_disk(id, tweet)
@@ -244,12 +304,16 @@ begin
   ta = TwitterArchiver.new($options[:user], $options[:token], $options[:secret])
   ta.hark(since_id, $options[:page], false) # Get timeline
   ta.hark(since_id, $options[:page], true) # Get last 800 mentions
+  ta.find_missing_replies
+  ta.try_to_download_replies
   ta.log_replies()
   
 rescue Errno::ENOENT
   puts "Whoops!"
   puts "There is no configuration file."
   puts "Place your username and password in a file called `config.yml`. See config-example.yml."
+rescue RetrieveError => e
+  puts "Nuts: #{e.reason}"
 rescue StandardError => e
   puts "Caught an error... Logging replies"
   ta.log_replies()
