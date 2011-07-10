@@ -3,92 +3,63 @@
 #  Created by Mark James Adams on 2007-05-14.
 #  Copyright (c) 2007. All rights reserved.
 
-require 'rubygems'
-require 'hpricot'
-require 'restclient'
-require 'uri'
-require 'fileutils'
 require 'optparse'
 require 'yaml'
+require 'twitter_archiver'
+require 'launchy'
 
-def hark(user, password, since_id, page)
-  
-  FileUtils.mkdir_p $options[:user] # Create a directory to hold the tweets
-  
-  listening = true
-  
-  while listening do # parse the account archive until we come to the last page (all)
-                     # or we see a tweet we've alrady downloaded
-  
-    begin
-      
-      unless since_id.nil? 
-        since_id_parameter = "&since_id=#{since_id}"
-      else
-        since_id_parameter = ""
-      end
+AUTH_FILE = "twitauth.yml"
 
-      page_parameter = "&page=#{page}"
-      count_parameter = "count=200"
-
-      query = count_parameter + since_id_parameter + page_parameter
-      
-      user_timeline_url = 'http://twitter.com/statuses/user_timeline.xml?' + query
-
-      user_timeline_resource = RestClient::Resource.new(user_timeline_url, :user => user, :password => password)
-
-      puts "Fetching #{user_timeline_url}"
-      user_timeline_xml = user_timeline_resource.get 
-      puts "Retrieved page #{page} ..."
-      
-      tweets = (Hpricot(user_timeline_xml)/"status")
-      puts "Parsing #{tweets.length} tweets..."
-
-      tweets.each {|tweet|
-
-       id = tweet.at("id").inner_html
-       
-       puts "Saving tweet #{id}" 
-       File.open("#{$options[:user]}/#{id}.xml", 'w') { |tweet_xml| tweet_xml << tweet.to_s}
-              
-      }
-
-      unless tweets.empty?
-        page = page + 1
-      else
-        listening = false
-      end
-     rescue RestClient::Unauthorized => e
-       puts "Could not authenticate with Twitter. Doublecheck your username (#{user}) and password"
-       listening = false
-     rescue RestClient::RequestFailed => e
-       puts "Twitter isn't responding: #{e.message}"
-       listening = false
-     end
-  end # listening
-  
+def prompt(default, *args)
+  if not STDOUT.sync
+    STDOUT.sync = true
+    fix = true
+  end
+  print(*args)
+  result = gets.strip
+  if fix
+    STDOUT.sync = false
+  end
+  return result.empty? ? default : result
 end
 
-# concatinate an array of XML status files into a single XML file
-def concatenate(archive)
-  File.open("#{$user}.xml", "w") { |archive_xml|
-    builder = Builder::XmlMarkup.new
-    builder.instruct!
-    builder.statuses do |b|
-      builder << "\n"
-      archive.each {|tweet| b << tweet.gsub('<?xml version="1.0" encoding="UTF-8"?>' + "\n", "")}
-    end
+def config(username)
+  users = YAML.load_file(AUTH_FILE)
+  config = Hash.new()
 
-    archive_xml << builder
-  }
-end
+  key = "KYcLNiVtuTb5F55gWuVZQw"
+  secret = "Vw36mGMxyhxxtfyz86UW9Fwtht4ZLmxerI4YUrRHLc"
+
+  # Get a request token
+  consumer = OAuth::Consumer.new(key, secret,
+                               { :site => "http://api.twitter.com",
+                                 :scheme => :header
+  })
+  request_token=consumer.get_request_token
+
+  # Launch the authorization URL
+  Launchy.open( request_token.authorize_url )
+
+  # Prompt for a PIN number
+  pin = prompt(nil,"Enter the Twitter PIN: ")
+  
+  if not pin.nil?
+    # Get an access token
+    access_token=request_token.get_access_token(:oauth_verifier => pin)
+    config['token'] = access_token.token
+    config['secret'] = access_token.secret
+    users[username] = config
+    File.open( AUTH_FILE, 'w' ) do |out|
+      YAML.dump( users, out )
+    end#File.open
+  end#if not pin.nil?
+end#config
 
 begin
 
   CONFIG = YAML.load_file('config.yml')
   $options = {}
-  $options[:user] = CONFIG['username']
-  $options[:pass] = CONFIG['password']
+	$options[:tweet_path] = File.expand_path(CONFIG['archive_dir'])
   OptionParser.new do |opts|
     opts.banner = "Usage: aviary.rb --updates [new|all] --page XXX"
   
@@ -96,33 +67,59 @@ begin
     opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
     $options[:page] = 1
     opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
+    $options[:new_account] = nil
+    opts.on("--add XXX", String, "NewAccount") {|account| $options[:new_account] = account}
+    $options[:only] = nil
+    opts.on("--only XXX", String, "OnlyAccount") {|account| $options[:only] = account}
+    $options[:debug] = nil
+    opts.on("-d", "--debug", "Run verbosely") { |v| $options[:debug] = v }
   end.parse!
 
   if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
-    puts "Usage: aviary.rb --updates [new|all] --page XXX"
+    puts "Usage: aviary.rb --updates [new|all] --page XXX --add XXX --only XXX --debug"
     exit
   end
 
-  $statuses = Array.new
-  FileUtils.mkdir_p $options[:user]
-  Dir.new($options[:user]).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
-    $statuses.push(id_xml.gsub('.xml', '').to_i)
-  }
+  if not $options[:new_account].nil?
+    config($options[:new_account])
+  end
+
+  USERS = YAML.load_file(AUTH_FILE)
 
   case $options[:updates]
   when :new
-    # find the most recent status
-    since_id = $statuses.sort.reverse.first
+    updates_only = true
   else :all
-    since_id = nil
+    updates_only = false
   end
+ 
+  USERS.each { |user, auth|
+    next unless ($options[:only].nil? or $options[:only]==user)
+    token = auth['token']
+    secret = auth['secret']
 
-  hark($options[:user], $options[:pass], since_id, $options[:page])
+    ta = TwitterArchiver.new(user, token, secret, $options[:tweet_path], $options[:debug])
+    ta.hark_timeline(updates_only, $options[:page]) # Get timeline
+    ta.hark_mentions(updates_only, $options[:page]) # Get last 800 mentions
+    ta.hark_messages(updates_only, $options[:page]) # Get direct messages sent to me
+    ta.hark_messages_sent(updates_only, $options[:page]) # Get direct messages I sent
+    ta.find_missing_replies # Look to see if we're missing any tweets we've replied to
+    ta.try_to_download_replies # Try to download those missing messages
+    ta.log_replies() # Make sure to save the list of missing messages
+  }
+
   
-rescue Errno::ENOENT
-  puts "Whoops!"
+rescue Errno::ENOENT => e
+  puts "Whoops! - #{e.message}"
   puts "There is no configuration file."
   puts "Place your username and password in a file called `config.yml`. See config-example.yml."
+rescue RetrieveError => e
+  puts "Nuts: #{e.reason}"
+rescue StandardError => e
+  puts "Caught an error... Logging replies"
+  ta.log_replies()
+  puts "Done"
+  puts e.message
 end
 
 
