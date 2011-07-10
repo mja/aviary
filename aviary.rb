@@ -8,6 +8,8 @@ require 'yaml'
 require 'twitter_archiver'
 require 'launchy'
 
+AUTH_FILE = "twitauth.yml"
+
 def prompt(default, *args)
   if not STDOUT.sync
     STDOUT.sync = true
@@ -22,8 +24,7 @@ def prompt(default, *args)
 end
 
 def config(username)
-  auth = "twitauth.yml"
-  users = YAML.load_file(auth)
+  users = YAML.load_file(AUTH_FILE)
   config = Hash.new()
 
   key = "KYcLNiVtuTb5F55gWuVZQw"
@@ -48,7 +49,7 @@ def config(username)
     config['token'] = access_token.token
     config['secret'] = access_token.secret
     users[username] = config
-    File.open( auth, 'w' ) do |out|
+    File.open( AUTH_FILE, 'w' ) do |out|
       YAML.dump( users, out )
     end#File.open
   end#if not pin.nil?
@@ -57,7 +58,6 @@ end#config
 begin
 
   CONFIG = YAML.load_file('config.yml')
-  USERS = YAML.load_file('twitauth.yml')
   $options = {}
 	$options[:tweet_path] = CONFIG['archive_dir']
   OptionParser.new do |opts|
@@ -67,12 +67,20 @@ begin
     opts.on("--updates [new|all]", [:new, :all], "Fetch only new or all updates") {|updates| $options[:updates] = updates}
     $options[:page] = 1
     opts.on("--page XXX", Integer, "Page") {|page| $options[:page] = page}
+    $options[:new_account] = nil
+    opts.on("--add XXX", String, "NewAccount") {|account| $options[:new_account] = account}
   end.parse!
 
   if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
-    puts "Usage: aviary.rb --updates [new|all] --page XXX"
+    puts "Usage: aviary.rb --updates [new|all] --page XXX --add XXX"
     exit
   end
+
+  if not $options[:new_account].nil?
+    config($options[:new_account])
+  end
+
+  USERS = YAML.load_file(AUTH_FILE)
 
   case $options[:updates]
   when :new
@@ -96,8 +104,8 @@ begin
   }
 
   
-rescue Errno::ENOENT
-  puts "Whoops!"
+rescue Errno::ENOENT => e
+  puts "Whoops! - #{e.message}"
   puts "There is no configuration file."
   puts "Place your username and password in a file called `config.yml`. See config-example.yml."
 rescue RetrieveError => e

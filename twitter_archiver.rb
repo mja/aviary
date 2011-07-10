@@ -62,12 +62,15 @@ class TwitterArchiver
     FileUtils.mkdir_p @t_prefix
     FileUtils.mkdir_p @dm_prefix
 
-    File.foreach(@replies_path) { |line|
-      track_reply(line.strip) unless line.nil?
-    }
-    File.foreach(@lost_replies_path) { |line|
-      track_reply(line.strip, true)
-    }
+    begin
+      File.foreach(@replies_path) { |line|
+        track_reply(line.strip) unless line.nil?
+      }
+      File.foreach(@lost_replies_path) { |line|
+        track_reply(line.strip, true)
+      }
+    rescue Errno::ENOENT
+    end
   end
 
   def log_replies()
@@ -112,6 +115,10 @@ class TwitterArchiver
     }
     # find the most recent status
     last_id = $statuses.sort.reverse.first
+    if last_id==""
+      last_id=nil
+    end
+    last_id
   end
 
   def got_reply(id, missing=false)
@@ -139,7 +146,11 @@ class TwitterArchiver
    
     if updates_only
       since_id = get_most_recent_id(dm)
-      since_id_parameter = "&since_id=#{since_id}"
+      if not since_id.nil?
+        since_id_parameter = "&since_id=#{since_id}"
+      else
+        since_id_parameter = ""
+      end
     else
       since_id_parameter = ""
     end 
