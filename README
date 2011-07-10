@@ -1,22 +1,43 @@
-== Aviary, a Twitter Archiver
+== Aviary+, a Twitter Archiver
 
-Aviary is a simple Ruby script to retrieve and archive your tweets. Twitter 
+Aviary+ is a simple Ruby script to retrieve and archive your tweets. Twitter 
 "claim no intellectual property rights over the material you provide to the 
 Twitter service," so you should have a way of storing and repurposing your 
 data.
 
+The original Aviary script (http://github.com/mja/aviary) was written by
+Mark James Adams. It only downloaded your tweets, from your timeline. I've
+updated it to login via OAuth, download your mentions, your direct messages,
+your sent direct messages, and any tweets that you have replied to.
+
 == Requirements
 
-Aviary requires the Hpricot and rest-client gems.
+Aviary+ requires the Launchy, nokogiri, and oauth gems.
 
-== Running Aviary
+== Running Aviary+
 
-First, copy the config-example.yml to config.yml, then fill in your username
-and password. Run Aviary with:
+First, copy the config-example.yml to config.yml, then edit the default
+path, for archiving tweets. The default is User/Documents/aviary, which
+is probably fine for most people.
+
+If you install your gems with rubygems, you'll need to execute Aviary+
+like this:
+
+  $ ruby -rubygems aviary.rb
+
+If you're using Ruby 1.9, this step won't be necessary.
+
+Next, add a Twitter account to aviary by running with
+  $ ruby aviary.rb --add accountname
+
+To add my jmartindf account I would execute it like this
+  $ ruby aviary.rb --add jmartindf
+
+Run Aviary+ with:
 
   $ ruby aviary.rb --updates [new|all] [--page XXX]
 
-Aviary will create a directory called USERNAME and begin parsing your Twitter 
+Aviary+ will create a directory called USERNAME and begin parsing your Twitter 
 archive and downloading the raw XML representation of each tweet. The 
 "--updates all" option will parse and save every tweet, while "--updates new" 
 will will only request tweets that are newer than the most recent one already

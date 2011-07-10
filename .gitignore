@@ -1,3 +1,6 @@
 *.xml
+*.txt
 .DS_Store
+debug.log
+twitauth.yml
 config.yml
