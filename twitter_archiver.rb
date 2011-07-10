@@ -45,10 +45,11 @@ class TwitterArchiver
     return access_token
   end
 
-  def initialize(user, token, secret, root)
+  def initialize(user, token, secret, root, debug=nil)
     @user = user
     @token = token
     @secret = secret
+    @debug = debug
     @access_token = prepare_access_token($options[:token], $options[:secret])
     @replies = Array.new()
     @lost_replies = Array.new()
@@ -134,7 +135,7 @@ class TwitterArchiver
     @replies.each { |id|
       pos = check_status_disk(id)
       if not pos.nil?
-        puts "Found tweet #{id}"
+        puts "Found tweet #{id}" unless @debug.nil?
         got_reply(id)
       end
     }
@@ -142,26 +143,26 @@ class TwitterArchiver
 
   def hark_timeline(updates_only, page)
     api = "http://api.twitter.com/1/statuses/user_timeline"
-    hark(updates_only, page, api, false)
+    hark("timeline", updates_only, page, api, false)
   end
 
   def hark_mentions(updates_only, page)
     api = "http://api.twitter.com/1/statuses/mentions"
-    hark(updates_only, page, api, false)
+    hark("mentions", updates_only, page, api, false)
 
   end
   
   def hark_messages(updates_only, page)
     api = "http://api.twitter.com/1/direct_messages"
-    hark(updates_only, page, api, true)
+    hark("messages", updates_only, page, api, true)
   end
 
   def hark_messages_sent(updates_only, page)
     api = "http://api.twitter.com/1/direct_messages/sent"
-    hark(updates_only, page, api, true)
+    hark("sent_messages", updates_only, page, api, true)
   end
 
-  def hark(updates_only, page, api, dm=false)
+  def hark(type, updates_only, page, api, dm=false)
     
     listening = true
    
@@ -194,11 +195,11 @@ class TwitterArchiver
         query = count_parameter + since_id_parameter + page_parameter + screen_name_parameter
         user_timeline_url = "#{api}.xml?" + query
         
-        puts "Fetching #{user_timeline_url}"
+        puts "Fetching #{user_timeline_url}" unless @debug.nil?
         user_timeline_resource = @access_token.request(:get, user_timeline_url)
         user_timeline_xml = user_timeline_resource.body
         File.open(File.join(@t_prefix,"debug.log"), 'w') { |data| data << user_timeline_xml }
-        puts "Retrieved page #{page} ..."
+        puts "Retrieved #{@user} #{type} page #{page} ..."
         hp = Nokogiri(user_timeline_xml)
         tweets = (hp/node)
         if tweets.length == 0
@@ -212,7 +213,7 @@ class TwitterArchiver
 
          id = tweet.at("id").inner_html
          
-         puts "Saving tweet #{id}" 
+         puts "Saving tweet #{id}" unless @debug.nil?
          save_tweet_disk(id, tweet, dm)
         }
 
@@ -226,7 +227,7 @@ class TwitterArchiver
         sleep(5)
         retry
       rescue RetrieveError => e
-        puts "Download failed: #{e.reason}"
+        puts "Download failed: #{e.reason}" unless @debug.nil?
         listening = false
        end
     end # listening
@@ -243,7 +244,7 @@ class TwitterArchiver
 
   def get_single_tweet(id)
     tweet_url = "http://api.twitter.com/1/statuses/show/#{id}.xml"
-    puts "Retrieving tweet " + id
+    puts "Retrieving tweet " + id unless @debug.nil?
     tweet_resource = @access_token.request(:get, tweet_url)
     tweet_xml = tweet_resource.body
     tweet = (Nokogiri(tweet_xml)/"status").first
@@ -267,7 +268,7 @@ class TwitterArchiver
         save_tweet_disk(id, tweet)
         got_reply(id)
         rescue RetrieveError => e
-          puts "#{e.reason}"
+          puts "#{e.reason}" unless @debug.nil?
         end
       }
   end
@@ -286,7 +287,7 @@ class TwitterArchiver
         end#while tweet.nil? do
       end#if tweet.nil?
       at = Time.parse(tweet.at("created_at").inner_html).iso8601
-      puts "Saving tweet #{id}" 
+      puts "Saving tweet #{id}"
       File.open(fname, 'w') { |tweet_xml| tweet_xml << tweet.to_s}
       reply_to = tweet.at("in_reply_to_status_id").inner_html unless dm
       if (not reply_to.nil?) and (not reply_to.eql?(""))
@@ -300,7 +301,7 @@ class TwitterArchiver
       end#if reply_to
     end#if status already exists
     rescue RetrieveError => e
-      puts "Couldn't download tweet #{e.reason}"
+      puts "Couldn't download tweet #{e.reason}" unless @debug.nil?
     end#begin block
   end#def save_tweet
 

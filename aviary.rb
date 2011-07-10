@@ -71,10 +71,12 @@ begin
     opts.on("--add XXX", String, "NewAccount") {|account| $options[:new_account] = account}
     $options[:only] = nil
     opts.on("--only XXX", String, "OnlyAccount") {|account| $options[:only] = account}
+    $options[:debug] = nil
+    opts.on("-d", "--debug", "Run verbosely") { |v| $options[:debug] = v }
   end.parse!
 
   if [:updates].map {|opt| $options[opt].nil?}.include?(nil)
-    puts "Usage: aviary.rb --updates [new|all] --page XXX --add XXX --only XXX"
+    puts "Usage: aviary.rb --updates [new|all] --page XXX --add XXX --only XXX --debug"
     exit
   end
 
@@ -96,7 +98,7 @@ begin
     token = auth['token']
     secret = auth['secret']
 
-    ta = TwitterArchiver.new(user, token, secret, $options[:tweet_path])
+    ta = TwitterArchiver.new(user, token, secret, $options[:tweet_path], $options[:debug])
     ta.hark_timeline(updates_only, $options[:page]) # Get timeline
     ta.hark_mentions(updates_only, $options[:page]) # Get last 800 mentions
     ta.hark_messages(updates_only, $options[:page]) # Get direct messages sent to me
