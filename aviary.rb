@@ -97,10 +97,10 @@ begin
     secret = auth['secret']
 
     ta = TwitterArchiver.new(user, token, secret, $options[:tweet_path])
-    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/statuses/user_timeline", false) # Get timeline
-    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/statuses/mentions", false) # Get last 800 mentions
-    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/direct_messages", true) # Get direct messages sent to me
-    ta.hark(updates_only, $options[:page], "http://api.twitter.com/1/direct_messages/sent", true) # Get direct messages I sent
+    ta.hark_timeline(updates_only, $options[:page]) # Get timeline
+    ta.hark_mentions(updates_only, $options[:page]) # Get last 800 mentions
+    ta.hark_messages(updates_only, $options[:page]) # Get direct messages sent to me
+    ta.hark_messages_sent(updates_only, $options[:page]) # Get direct messages I sent
     ta.find_missing_replies # Look to see if we're missing any tweets we've replied to
     ta.try_to_download_replies # Try to download those missing messages
     ta.log_replies() # Make sure to save the list of missing messages

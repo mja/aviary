@@ -140,6 +140,27 @@ class TwitterArchiver
     }
   end
 
+  def hark_timeline(updates_only, page)
+    api = "http://api.twitter.com/1/statuses/user_timeline"
+    hark(updates_only, page, api, false)
+  end
+
+  def hark_mentions(updates_only, page)
+    api = "http://api.twitter.com/1/statuses/mentions"
+    hark(updates_only, page, api, false)
+
+  end
+  
+  def hark_messages(updates_only, page)
+    api = "http://api.twitter.com/1/direct_messages"
+    hark(updates_only, page, api, true)
+  end
+
+  def hark_messages_sent(updates_only, page)
+    api = "http://api.twitter.com/1/direct_messages/sent"
+    hark(updates_only, page, api, true)
+  end
+
   def hark(updates_only, page, api, dm=false)
     
     listening = true
