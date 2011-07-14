@@ -51,7 +51,7 @@ class TwitterArchiver
     @secret = secret
     @debug = debug
 
-    @access_token = prepare_access_token($options[:token], $options[:secret])
+    @access_token = prepare_access_token(@token, @secret)
     @replies = Array.new()
     @lost_replies = Array.new()
 
@@ -70,13 +70,20 @@ class TwitterArchiver
 
     @t_node = "status"
     @dm_node = "direct_message"
-    
+   
+    needed = cleanup_needed?
+
     FileUtils.mkdir_p @t_prefix
     FileUtils.mkdir_p @dm_prefix
     FileUtils.mkdir_p @m_prefix
     FileUtils.mkdir_p @dm_sent_prefix
 
     begin
+      
+      if needed
+        cleanup_tweets()
+      end
+
       File.foreach(@replies_path) { |line|
         track_reply(line.strip) unless line.nil?
       }
@@ -141,8 +148,9 @@ class TwitterArchiver
   def find_missing_replies
     @replies.uniq!
     @replies.each { |id|
-      pos = check_status_disk(id)
-      if not pos.nil?
+      pos = check_status_disk(id,@t_prefix) ### FIXME? ###
+      pos2 = check_status_disk(id,@m_prefix) ### FIXME? ###
+      if not pos.nil? or not pos2.nil?
         puts "Found tweet #{id}" unless @debug.nil?
         got_reply(id)
       end
@@ -252,9 +260,9 @@ class TwitterArchiver
     
   end
 
-  def check_status_disk(id)
+  def check_status_disk(id,path)
     $statuses = Array.new
-    Dir.new(@t_prefix).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+    Dir.new(path).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
       $statuses.push(id_xml.gsub('.xml', '').to_i)
     }
     return $statuses.index(id.to_i)
@@ -283,7 +291,7 @@ class TwitterArchiver
       @replies.each { |id|
         begin
         tweet = get_single_tweet(id)
-        save_tweet_disk(id, tweet)
+        save_tweet_disk(id, tweet, @t_prefix, false) ### FIXME? ###
         got_reply(id)
         rescue RetrieveError => e
           puts "#{e.reason}" unless @debug.nil?
@@ -294,7 +302,7 @@ class TwitterArchiver
   def save_tweet_disk(id, tweet, path, dm)
     fname = File.join(path, "#{id}.xml")
     begin
-    if not check_status_disk(id)
+    if not check_status_disk(id,path)
       if tweet.nil?
         while tweet.nil? do
           tweet = get_single_tweet(id)
@@ -319,20 +327,35 @@ class TwitterArchiver
     end#begin block
   end#def save_tweet
 
+  def cleanup_needed?
+    t_path = File.dirname(@t_prefix)
+    if File.exists?(t_path) and not File.exists?(@dm_sent_prefix)
+      true
+    else
+      false
+    end
+  end
+
   def cleanup_tweets()
     t_path = File.dirname(@t_prefix)
     
-    Dir.new(dirname).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
-      tweet = (Nokogiri(open(id_xml))/@t_node)
-      # sent_by = "status/user/screen_name"
-      # if sent_by != @user
-      # move to mentions path
+    Dir.new(t_path).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+      full_path = File.join(t_path,id_xml)
+      tweet = (Nokogiri(open(full_path))/@t_node)
+      sent_by = tweet.at("user/screen_name").inner_html
+      if not sent_by.eql?(@user)
+        FileUtils.mv(full_path,@m_prefix)
+      else
+        FileUtils.mv(full_path,@t_prefix)
+      end
     }
     Dir.new(@dm_prefix).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
-      tweet = (Nokogiri(open(id_xml))/@dm_node)
-      # sent_by = "sender_screen_name"
-      # if sent_by != @user
-      # move to dm_sent path
+      full_path = File.join(@dm_prefix,id_xml)
+      tweet = (Nokogiri(open(full_path))/@dm_node)
+      sent_by = tweet.at("sender_screen_name").inner_html
+      if not sent_by.eql?(@user)
+        FileUtils.mv(full_path,@dm_sent_prefix)
+      end
     }
   end
 
