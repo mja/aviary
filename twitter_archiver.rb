@@ -50,20 +50,40 @@ class TwitterArchiver
     @token = token
     @secret = secret
     @debug = debug
-    @access_token = prepare_access_token($options[:token], $options[:secret])
+
+    @access_token = prepare_access_token(@token, @secret)
     @replies = Array.new()
     @lost_replies = Array.new()
-    @t_prefix = File.join(root, @user,"")
+
+    @t_prefix = File.join(root, @user,"timeline")
+    @m_prefix = File.join(root, @user,"mentions")
     @dm_prefix = File.join(root, @user,"dm")
+    @dm_sent_prefix = File.join(root, @user,"dm_sent")
+
+    @api_timeline = "http://api.twitter.com/1/statuses/user_timeline"
+    @api_mentions = "http://api.twitter.com/1/statuses/mentions"
+    @api_dm = "http://api.twitter.com/1/direct_messages"
+    @api_dm_sent = "http://api.twitter.com/1/direct_messages/sent"
+
     @replies_path = File.join(@t_prefix,"replies.txt")
     @lost_replies_path = File.join(@t_prefix,"lost_replies.txt")
+
     @t_node = "status"
     @dm_node = "direct_message"
-    
+   
+    needed = cleanup_needed?
+
     FileUtils.mkdir_p @t_prefix
     FileUtils.mkdir_p @dm_prefix
+    FileUtils.mkdir_p @m_prefix
+    FileUtils.mkdir_p @dm_sent_prefix
 
     begin
+      
+      if needed
+        cleanup_tweets()
+      end
+
       File.foreach(@replies_path) { |line|
         track_reply(line.strip) unless line.nil?
       }
@@ -104,13 +124,8 @@ class TwitterArchiver
     log_replies()
   end
 
-  def get_most_recent_id(dm=false)
+  def get_most_recent_id(dirname)
     $statuses = Array.new
-    if dm
-      dirname = @dm_prefix
-    else
-      dirname = @t_prefix
-    end
     Dir.new(dirname).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
       $statuses.push(id_xml.gsub('.xml', '').to_i)
     }
@@ -133,8 +148,9 @@ class TwitterArchiver
   def find_missing_replies
     @replies.uniq!
     @replies.each { |id|
-      pos = check_status_disk(id)
-      if not pos.nil?
+      pos = check_status_disk(id,@t_prefix) ### FIXME? ###
+      pos2 = check_status_disk(id,@m_prefix) ### FIXME? ###
+      if not pos.nil? or not pos2.nil?
         puts "Found tweet #{id}" unless @debug.nil?
         got_reply(id)
       end
@@ -142,32 +158,48 @@ class TwitterArchiver
   end
 
   def hark_timeline(updates_only, page)
-    api = "http://api.twitter.com/1/statuses/user_timeline"
-    hark("timeline", updates_only, page, api, false)
+    hark("timeline", updates_only, page, @api_timeline)
   end
 
   def hark_mentions(updates_only, page)
-    api = "http://api.twitter.com/1/statuses/mentions"
-    hark("mentions", updates_only, page, api, false)
+    hark("mentions", updates_only, page, @api_mentions)
 
   end
   
   def hark_messages(updates_only, page)
-    api = "http://api.twitter.com/1/direct_messages"
-    hark("messages", updates_only, page, api, true)
+    hark("messages", updates_only, page, @api_dm)
   end
 
   def hark_messages_sent(updates_only, page)
-    api = "http://api.twitter.com/1/direct_messages/sent"
-    hark("sent_messages", updates_only, page, api, true)
+    hark("sent_messages", updates_only, page, @api_dm_sent)
   end
 
-  def hark(type, updates_only, page, api, dm=false)
+  def hark(type, updates_only, page, api)
     
     listening = true
-   
+    dm = false
+    path = nil
+    
+    if api.eql?(@api_dm)
+      node = @dm_node
+      dm = true
+      path = @dm_prefix
+    elsif api.eql?(@api_dm_sent)
+      node = @dm_node
+      dm = true
+      path = @dm_sent_prefix
+    elsif api.eql?(@api_timeline)
+      node = @t_node
+      dm = false
+      path = @t_prefix
+    elsif api.eql?(@api_mentions)
+      node = @t_node
+      dm = false
+      path = @m_prefix
+    end
+    
     if updates_only
-      since_id = get_most_recent_id(dm)
+      since_id = get_most_recent_id(path)
       if not since_id.nil?
         since_id_parameter = "&since_id=#{since_id}"
       else
@@ -177,12 +209,6 @@ class TwitterArchiver
       since_id_parameter = ""
     end 
 
-    if dm
-      node = @dm_node
-    else
-      node = @t_node
-    end
-    
     count_parameter = "count=200"
     screen_name_parameter = "&screen_name=#{@user}"
     
@@ -214,7 +240,7 @@ class TwitterArchiver
          id = tweet.at("id").inner_html
          
          puts "Saving tweet #{id}" unless @debug.nil?
-         save_tweet_disk(id, tweet, dm)
+         save_tweet_disk(id, tweet, path, dm)
         }
 
         unless tweets.empty?
@@ -234,9 +260,9 @@ class TwitterArchiver
     
   end
 
-  def check_status_disk(id)
+  def check_status_disk(id,path)
     $statuses = Array.new
-    Dir.new(@t_prefix).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+    Dir.new(path).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
       $statuses.push(id_xml.gsub('.xml', '').to_i)
     }
     return $statuses.index(id.to_i)
@@ -265,7 +291,7 @@ class TwitterArchiver
       @replies.each { |id|
         begin
         tweet = get_single_tweet(id)
-        save_tweet_disk(id, tweet)
+        save_tweet_disk(id, tweet, @t_prefix, false) ### FIXME? ###
         got_reply(id)
         rescue RetrieveError => e
           puts "#{e.reason}" unless @debug.nil?
@@ -273,14 +299,10 @@ class TwitterArchiver
       }
   end
 
-  def save_tweet_disk(id, tweet, dm=false)
-    if dm
-      fname = File.join(@dm_prefix, "#{id}.xml")
-    else
-      fname = File.join(@t_prefix, "#{id}.xml")
-    end
+  def save_tweet_disk(id, tweet, path, dm)
+    fname = File.join(path, "#{id}.xml")
     begin
-    if not check_status_disk(id)
+    if not check_status_disk(id,path)
       if tweet.nil?
         while tweet.nil? do
           tweet = get_single_tweet(id)
@@ -304,6 +326,38 @@ class TwitterArchiver
       puts "Couldn't download tweet #{e.reason}" unless @debug.nil?
     end#begin block
   end#def save_tweet
+
+  def cleanup_needed?
+    t_path = File.dirname(@t_prefix)
+    if File.exists?(t_path) and not File.exists?(@dm_sent_prefix)
+      true
+    else
+      false
+    end
+  end
+
+  def cleanup_tweets()
+    t_path = File.dirname(@t_prefix)
+    
+    Dir.new(t_path).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+      full_path = File.join(t_path,id_xml)
+      tweet = (Nokogiri(open(full_path))/@t_node)
+      sent_by = tweet.at("user/screen_name").inner_html
+      if not sent_by.eql?(@user)
+        FileUtils.mv(full_path,@m_prefix)
+      else
+        FileUtils.mv(full_path,@t_prefix)
+      end
+    }
+    Dir.new(@dm_prefix).select {|file| file =~ /\d+.xml$/}.each{|id_xml| 
+      full_path = File.join(@dm_prefix,id_xml)
+      tweet = (Nokogiri(open(full_path))/@dm_node)
+      sent_by = tweet.at("sender_screen_name").inner_html
+      if not sent_by.eql?(@user)
+        FileUtils.mv(full_path,@dm_sent_prefix)
+      end
+    }
+  end
 
 end
 

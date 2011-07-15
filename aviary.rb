@@ -110,16 +110,19 @@ begin
 
   
 rescue Errno::ENOENT => e
-  puts "Whoops! - #{e.message}"
+  puts "Whoops!"
+  puts "#{e.message}" unless $options[:debug]
   puts "There is no configuration file."
   puts "Place your username and password in a file called `config.yml`. See config-example.yml."
+  puts e.backtrace unless $options[:debug]
 rescue RetrieveError => e
-  puts "Nuts: #{e.reason}"
+  puts "Nuts: #{e.reason}" unless not $options[:debug]
 rescue StandardError => e
   puts "Caught an error... Logging replies"
   ta.log_replies()
   puts "Done"
-  puts e.message
+  puts e.message unless not $options[:debug]
+  puts e.backtrace unless not $options[:debug]
 end
 
 

@@ -1,0 +1,11 @@
+0.9.1
+	* I'm arbitrarily starting the version numbering at 0.9.0 for my overhaul
+	and 0.9.1 for this bug fix.
+	* Now storing timeline tweet, mention tweets, direct messages, and sent
+	direct messages in separate directories.
+	* Now automatically moving xml files to the new directories, if you were
+	using a previous version.
+	* Before---if a tweet on your timeline was more recent than a tweet in your
+	mentions, the tweet in your mentions wouldn't be downloaded (in update
+	mode). The new directory structure makes it work properly.
+
